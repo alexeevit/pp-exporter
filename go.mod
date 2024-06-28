@@ -1,4 +1,4 @@
-module example.com/m/v2
+module github.com/alexeevit/pp-exporter
 
 go 1.22.4
 
