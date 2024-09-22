@@ -1,180 +1,218 @@
 package main
 
 import (
-        "encoding/json"
-        "flag"
-        "net/http"
-        "time"
-        "log"
-        "fmt"
+    "encoding/json"
+    "flag"
+    "net/http"
+    "time"
+    "log"
+    "fmt"
 
-        "github.com/prometheus/client_golang/prometheus"
-        "github.com/prometheus/client_golang/prometheus/promauto"
-        "github.com/prometheus/client_golang/prometheus/promhttp"
+    "github.com/prometheus/client_golang/prometheus"
+    "github.com/prometheus/client_golang/prometheus/promauto"
+    "github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type DebugVarsRoot struct {
-        Stats StatsRoot
+    Stats StatsRoot
 }
 
 type StatsRoot struct {
-        Inbound InboundStats
-        Outbound OutboundStats
-        User map[string]IOEntry
+    Inbound InboundStats
+    Outbound OutboundStats
+    User map[string]IOEntry
 }
 
 type InboundStats struct {
-        Api IOEntry
-        MetricsIn IOEntry `json:"metrics_in"`
-        VlessTls IOEntry `json:"vless_tls"`
+    Api IOEntry
+    MetricsIn IOEntry `json:"metrics_in"`
+    VlessTls IOEntry `json:"vless_tls"`
 }
 
 type OutboundStats struct {
-        Block IOEntry
-        Direct IOEntry
+    Block IOEntry
+    Direct IOEntry
 }
 
 type IOEntry struct {
-        Downlink int
-        Uplink int
+    Downlink int
+    Uplink int
 }
 
-var inboundApiDownlink = promauto.NewGauge(
-        prometheus.GaugeOpts{
-                Name: "pp_inbound_api_downlink",
-                Help: "",
-        },
+var inboundApiDownlinkValue float64
+var inboundApiDownlink = promauto.NewCounter(
+    prometheus.CounterOpts{
+        Name: "pp_inbound_api_downlink_total",
+        Help: "",
+    },
 )
 
-var inboundApiUplink = promauto.NewGauge(
-        prometheus.GaugeOpts{
-                Name: "pp_inbound_api_uplink",
-                Help: "",
-        },
+var inboundApiUplinkValue float64
+var inboundApiUplink = promauto.NewCounter(
+    prometheus.CounterOpts{
+        Name: "pp_inbound_api_uplink_total",
+        Help: "",
+    },
 )
 
-var inboundMetricsInDownlink = promauto.NewGauge(
-        prometheus.GaugeOpts{
-                Name: "pp_inbound_metrics_in_downlink",
-                Help: "",
-        },
+var inboundMetricsInDownlinkValue float64
+var inboundMetricsInDownlink = promauto.NewCounter(
+    prometheus.CounterOpts{
+        Name: "pp_inbound_metrics_in_downlink_total",
+        Help: "",
+    },
 )
 
-var inboundMetricsInUplink = promauto.NewGauge(
-        prometheus.GaugeOpts{
-                Name: "pp_inbound_metrics_in_uplink",
-                Help: "",
-        },
+var inboundMetricsInUplinkValue float64
+var inboundMetricsInUplink = promauto.NewCounter(
+    prometheus.CounterOpts{
+        Name: "pp_inbound_metrics_in_uplink_total",
+        Help: "",
+    },
 )
 
-var inboundVlessTlsDownlink = promauto.NewGauge(
-        prometheus.GaugeOpts{
-                Name: "pp_inbound_vless_tls_downlink",
-                Help: "",
-        },
+var inboundVlessTlsDownlinkValue float64
+var inboundVlessTlsDownlink = promauto.NewCounter(
+    prometheus.CounterOpts{
+        Name: "pp_inbound_vless_tls_downlink_total",
+        Help: "",
+    },
 )
 
-var inboundVlessTlsUplink = promauto.NewGauge(
-        prometheus.GaugeOpts{
-                Name: "pp_inbound_vless_tls_uplink",
-                Help: "",
-        },
+var inboundVlessTlsUplinkValue float64
+var inboundVlessTlsUplink = promauto.NewCounter(
+    prometheus.CounterOpts{
+        Name: "pp_inbound_vless_tls_uplink_total",
+        Help: "",
+    },
 )
 
-var outboundBlockDownlink = promauto.NewGauge(
-        prometheus.GaugeOpts{
-                Name: "pp_outbound_block_downlink",
-                Help: "",
-        },
+var outboundBlockDownlinkValue float64
+var outboundBlockDownlink = promauto.NewCounter(
+    prometheus.CounterOpts{
+        Name: "pp_outbound_block_downlink_total",
+        Help: "",
+    },
 )
 
-var outboundBlockUplink = promauto.NewGauge(
-        prometheus.GaugeOpts{
-                Name: "pp_outbound_block_uplink",
-                Help: "",
-        },
+var outboundBlockUplinkValue float64
+var outboundBlockUplink = promauto.NewCounter(
+    prometheus.CounterOpts{
+        Name: "pp_outbound_block_uplink_total",
+        Help: "",
+    },
 )
 
-var outboundDirectDownlink = promauto.NewGauge(
-        prometheus.GaugeOpts{
-                Name: "pp_outbound_direct_downlink",
-                Help: "",
-        },
+var outboundDirectDownlinkValue float64
+var outboundDirectDownlink = promauto.NewCounter(
+    prometheus.CounterOpts{
+        Name: "pp_outbound_direct_downlink_total",
+        Help: "",
+    },
 )
 
-var outboundDirectUplink = promauto.NewGauge(
-        prometheus.GaugeOpts{
-                Name: "pp_outbound_direct_uplink",
-                Help: "",
-        },
+var outboundDirectUplinkValue float64
+var outboundDirectUplink = promauto.NewCounter(
+    prometheus.CounterOpts{
+        Name: "pp_outbound_direct_uplink_total",
+        Help: "",
+    },
 )
 
-var userDownlink = promauto.NewGaugeVec(
-        prometheus.GaugeOpts{
-                Name: "pp_user_downlink",
-                Help: "",
-        },
-        []string{"email"},
+var userDownlinkValues map[string]float64 = make(map[string]float64)
+var userDownlink = promauto.NewCounterVec(
+    prometheus.CounterOpts{
+        Name: "pp_user_downlink_total",
+        Help: "",
+    },
+    []string{"email"},
 )
 
-var userUplink = promauto.NewGaugeVec(
-        prometheus.GaugeOpts{
-                Name: "pp_user_uplink",
-                Help: "",
-        },
-        []string{"email"},
+var userUplinkValues map[string]float64 = make(map[string]float64)
+var userUplink = promauto.NewCounterVec(
+    prometheus.CounterOpts{
+        Name: "pp_user_uplink_total",
+        Help: "",
+    },
+    []string{"email"},
 )
+
+func getValueWithDefault(m map[string]float64, key string, defaultValue float64) float64 {
+    if value, exists := m[key]; exists {
+        return value
+    }
+    return defaultValue
+}
 
 func updateStats(url string, wait int) {
-      go func() {
-              for {
-                        stats, err := loadPPStats(url)
+    go func() {
+        for {
+              stats, err := loadPPStats(url)
 
-                        if err != nil {
-                                log.Println("Error polling PP endpoint, trying again in", wait, "sec")
-                        } else {
-                                inboundApiDownlink.Set(float64(stats.Inbound.Api.Downlink))
-                                inboundApiUplink.Set(float64(stats.Inbound.Api.Uplink))
-                                inboundMetricsInDownlink.Set(float64(stats.Inbound.MetricsIn.Downlink))
-                                inboundMetricsInUplink.Set(float64(stats.Inbound.MetricsIn.Uplink))
-                                inboundVlessTlsDownlink.Set(float64(stats.Inbound.VlessTls.Downlink))
-                                inboundVlessTlsUplink.Set(float64(stats.Inbound.VlessTls.Uplink))
-                                outboundBlockDownlink.Set(float64(stats.Outbound.Block.Downlink))
-                                outboundBlockUplink.Set(float64(stats.Outbound.Block.Uplink))
-                                outboundDirectDownlink.Set(float64(stats.Outbound.Direct.Downlink))
-                                outboundDirectUplink.Set(float64(stats.Outbound.Direct.Uplink))
+              if err != nil {
+                  log.Println("Error polling PP endpoint, trying again in", wait, "sec")
+              } else {
+                  inboundApiDownlink.Add(float64(stats.Inbound.Api.Downlink) - inboundApiDownlinkValue)
+                  inboundApiDownlinkValue = float64(stats.Inbound.Api.Downlink)
 
-                                for email, ioStats := range stats.User {
-                                        userDownlink.WithLabelValues(email).Set(float64(ioStats.Downlink))
-                                        userUplink.WithLabelValues(email).Set(float64(ioStats.Uplink))
-                                }
-                        }
-                        log.Println("Stats are successfully updated")
+                  inboundApiUplink.Add(float64(stats.Inbound.Api.Uplink) - inboundApiUplinkValue)
+                  inboundApiUplinkValue = float64(stats.Inbound.Api.Uplink)
 
-                        time.Sleep(time.Duration(wait) * time.Second)
+                  inboundMetricsInDownlink.Add(float64(stats.Inbound.MetricsIn.Downlink) - inboundMetricsInDownlinkValue)
+                  inboundMetricsInDownlinkValue = float64(stats.Inbound.MetricsIn.Downlink)
+
+                  inboundMetricsInUplink.Add(float64(stats.Inbound.MetricsIn.Uplink) - inboundMetricsInUplinkValue)
+                  inboundMetricsInUplinkValue = float64(stats.Inbound.MetricsIn.Uplink)
+
+                  inboundVlessTlsDownlink.Add(float64(stats.Inbound.VlessTls.Downlink) - inboundVlessTlsDownlinkValue)
+                  inboundVlessTlsDownlinkValue = float64(stats.Inbound.VlessTls.Downlink)
+
+                  inboundVlessTlsUplink.Add(float64(stats.Inbound.VlessTls.Uplink) - inboundVlessTlsUplinkValue)
+                  inboundVlessTlsUplinkValue = float64(stats.Inbound.VlessTls.Uplink)
+
+                  outboundBlockDownlink.Add(float64(stats.Outbound.Block.Downlink) - outboundBlockDownlinkValue)
+                  outboundBlockDownlinkValue = float64(stats.Outbound.Block.Downlink)
+
+                  outboundBlockUplink.Add(float64(stats.Outbound.Block.Uplink) - outboundBlockUplinkValue)
+                  outboundBlockUplinkValue = float64(stats.Outbound.Block.Uplink)
+
+                  outboundDirectDownlink.Add(float64(stats.Outbound.Direct.Downlink) - outboundDirectDownlinkValue)
+                  outboundDirectDownlinkValue = float64(stats.Outbound.Direct.Downlink)
+
+                  outboundDirectUplink.Add(float64(stats.Outbound.Direct.Uplink) - outboundDirectUplinkValue)
+                  outboundDirectUplinkValue = float64(stats.Outbound.Direct.Uplink)
+
+                  for email, ioStats := range stats.User {
+                      currentDownlink := getValueWithDefault(userDownlinkValues, email, 0.0)
+                      currentUplink := getValueWithDefault(userUplinkValues, email, 0.0)
+
+                      userDownlink.WithLabelValues(email).Add(float64(ioStats.Downlink) - currentDownlink)
+                      userDownlinkValues[email] = float64(ioStats.Downlink)
+
+                      userUplink.WithLabelValues(email).Add(float64(ioStats.Uplink) - currentUplink)
+                      userUplinkValues[email] = float64(ioStats.Uplink)
+                  }
               }
-      }()
+              log.Println("Stats are successfully updated")
+              time.Sleep(time.Duration(wait) * time.Second)
+        }
+    }()
 }
 
 func loadPPStats(url string) (stats *StatsRoot, err error) {
-        resp, err := http.Get(url)
-
-        if err != nil {
-                log.Println("Loading failed")
-                return
-        }
-
-        defer resp.Body.Close()
-
-        var debugVars = new(DebugVarsRoot)
-
-        json.NewDecoder(resp.Body).Decode(&debugVars)
-
-        return &debugVars.Stats, nil
+    resp, err := http.Get(url)
+    if err != nil {
+        log.Println("Loading failed")
+        return
+    }
+    defer resp.Body.Close()
+    var debugVars = new(DebugVarsRoot)
+    json.NewDecoder(resp.Body).Decode(&debugVars)
+    return &debugVars.Stats, nil
 }
 
 func rootHandler(w http.ResponseWriter, r *http.Request) {
-        w.Write([]byte("Hello to PP exporter"))
+    w.Write([]byte("Hello to PP exporter"))
 }
 
 func main() {
